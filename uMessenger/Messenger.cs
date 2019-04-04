@@ -6,11 +6,11 @@ namespace uMessenger
 {
     public class Messenger : MonoBehaviour
     {
+        // Thread lock.
+        private static object m_MessengerLock = new object();
+
         // Messenger event dictionary.
         private Dictionary<string, MessengerEvent> m_EventDictionary = new Dictionary<string, MessengerEvent>();
-
-        // Singleton thread lock.
-        private static object m_SingletonLock = new object();
 
         // Singleton messenger instance.
         private static Messenger m_Instance;
@@ -20,7 +20,7 @@ namespace uMessenger
             {
                 if (m_Instance == null)
                 {
-                    lock (m_SingletonLock)
+                    lock (m_MessengerLock)
                     {
                         // Retrieve the instance(s) from the scene.
                         Messenger[] instances = FindObjectsOfType(typeof(Messenger)) as Messenger[];
@@ -43,26 +43,35 @@ namespace uMessenger
 
         public void Accept(string eventName, UnityAction<object[]> eventListener)
         {
-            if (m_EventDictionary.TryGetValue(eventName, out MessengerEvent thisEvent))
-                thisEvent.AddListener(eventListener);
-            else
+            lock (m_MessengerLock)
             {
-                thisEvent = new MessengerEvent();
-                thisEvent.AddListener(eventListener);
-                m_EventDictionary.Add(eventName, thisEvent);
+                if (m_EventDictionary.TryGetValue(eventName, out MessengerEvent thisEvent))
+                    thisEvent.AddListener(eventListener);
+                else
+                {
+                    thisEvent = new MessengerEvent();
+                    thisEvent.AddListener(eventListener);
+                    m_EventDictionary.Add(eventName, thisEvent);
+                }
             }
         }
 
         public void Ignore(string eventName, UnityAction<object[]> eventListener)
         {
-            if (m_EventDictionary.TryGetValue(eventName, out MessengerEvent thisEvent))
-                thisEvent.RemoveListener(eventListener);
+            lock (m_MessengerLock)
+            {
+                if (m_EventDictionary.TryGetValue(eventName, out MessengerEvent thisEvent))
+                    thisEvent.RemoveListener(eventListener);
+            }
         }
 
         public void Send(string eventName, object[] args = null)
         {
-            if (m_EventDictionary.TryGetValue(eventName, out MessengerEvent thisEvent))
-                thisEvent.Invoke(args);
+            lock (m_MessengerLock)
+            {
+                if (m_EventDictionary.TryGetValue(eventName, out MessengerEvent thisEvent))
+                    thisEvent.Invoke(args);
+            }
         }
     }
 }
